@@ -345,18 +345,41 @@ class _GatePassPageState extends State<GatePassPage> {
 }
 
 // 2. AI MAINTENANCE PAGE
+// 2. AI MAINTENANCE PAGE (STUDENT TICKETING UI)
+
 class MaintenancePage extends StatefulWidget {
   final String studentId;
   MaintenancePage({required this.studentId});
   @override _MaintenancePageState createState() => _MaintenancePageState();
 }
+
 class _MaintenancePageState extends State<MaintenancePage> {
-  final TextEditingController nameController = TextEditingController();
   final TextEditingController roomController = TextEditingController();
   final TextEditingController issueController = TextEditingController();
   String selectedCategory = "Electrical";
   String priorityLevel = "Normal"; 
   Color priorityColor = Colors.green; 
+  List<dynamic> myComplaints = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchMyComplaints();
+  }
+
+  Future<void> fetchMyComplaints() async {
+    setState(() => isLoading = true);
+    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
+    try {
+      var response = await http.get(Uri.parse('http://$ip:8000/get-complaints'));
+      var allComplaints = jsonDecode(response.body);
+      setState(() {
+        myComplaints = allComplaints.where((c) => c['student_id'] == widget.studentId).toList();
+        isLoading = false;
+      });
+    } catch (e) { print(e); setState(() => isLoading = false); }
+  }
 
   void _analyzeComplaint(String text) {
     text = text.toLowerCase();
@@ -377,60 +400,133 @@ class _MaintenancePageState extends State<MaintenancePage> {
       var response = await http.post(url, headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "student_id": widget.studentId, 
-          "student_name": nameController.text.isEmpty ? "Student" : nameController.text,
+          "student_name": "Student", // Replace with actual name logic if needed
           "room_number": roomController.text,
           "issue": finalIssue, 
           "category": selectedCategory
         }));
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Complaint Sent!"), backgroundColor: Colors.green));
+        Navigator.pop(context); 
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ticket Raised!"), backgroundColor: Color(0xFF0D9488)));
         issueController.clear();
+        fetchMyComplaints(); 
       }
     } catch (e) { print(e); }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(20),
+  void _showRaiseTicketModal() {
+    showModalBottomSheet(
+      context: context, isScrollControlled: true, backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("Raise New Ticket", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.pop(context))]),
+                  SizedBox(height: 15),
+                  TextField(controller: roomController, decoration: InputDecoration(labelText: "Room Number")),
+                  SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory, decoration: InputDecoration(labelText: "Category"),
+                    items: ["Electrical", "Plumbing", "Carpentry", "Cleaning", "Other"].map((String val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+                    onChanged: (val) => setModalState(() => selectedCategory = val!),
+                  ),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: issueController, maxLines: 3, decoration: InputDecoration(labelText: "Describe the Issue"),
+                    onChanged: (text) { _analyzeComplaint(text); setModalState(() {}); },
+                  ),
+                  SizedBox(height: 15),
+                  Container(
+                    padding: EdgeInsets.all(12), decoration: BoxDecoration(color: priorityColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: priorityColor)),
+                    child: Row(children: [Icon(Icons.analytics, color: priorityColor, size: 20), SizedBox(width: 10), Expanded(child: Text("AI Assessment: $priorityLevel", style: TextStyle(color: priorityColor, fontWeight: FontWeight.bold, fontSize: 12)))]),
+                  ),
+                  SizedBox(height: 20),
+                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D9488), foregroundColor: Colors.white), onPressed: submitComplaint, child: Text("Submit Ticket", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)))),
+                  SizedBox(height: 20),
+                ],
+              ),
+            );
+          }
+        );
+      },
+    );
+  }
+
+  Widget _buildStudentTicketCard({required String ticketId, required String priority, required String category, required String issue, required bool isHighPriority, required String currentStatus}) {
+    Color priorityColor = isHighPriority ? Colors.red.shade700 : Colors.orange.shade700;
+    Color priorityBg = isHighPriority ? Colors.red.shade50 : Colors.orange.shade50;
+    IconData statusIcon = Icons.pending_actions;
+    Color statusColor = Colors.blueGrey;
+    
+    if (currentStatus == "In Progress") { statusIcon = Icons.engineering; statusColor = Colors.blue.shade700; } 
+    else if (currentStatus == "Resolved") { statusIcon = Icons.check_circle; statusColor = Colors.green.shade700; }
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 15), padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("AI Maintenance", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
-          SizedBox(height: 20),
-          TextField(controller: roomController, decoration: InputDecoration(labelText: "Room Number")),
-          SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            value: selectedCategory,
-            decoration: InputDecoration(labelText: "Category"),
-            items: ["Electrical", "Plumbing", "Furniture", "Cleanliness", "Other"].map((String val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
-            onChanged: (val) => setState(() => selectedCategory = val!),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(children: [
+                Text(ticketId, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)), SizedBox(width: 10),
+                Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: priorityBg, borderRadius: BorderRadius.circular(4)), child: Text(priority, style: TextStyle(color: priorityColor, fontSize: 10, fontWeight: FontWeight.bold))), SizedBox(width: 10),
+                Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)), child: Text(category, style: TextStyle(color: Colors.blueGrey, fontSize: 10, fontWeight: FontWeight.bold))),
+              ]),
+              Row(children: [Icon(statusIcon, size: 14, color: statusColor), SizedBox(width: 4), Text(currentStatus, style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.bold))])
+            ],
           ),
-          SizedBox(height: 10),
-          TextField(
-            controller: issueController, maxLines: 3,
-            decoration: InputDecoration(labelText: "Describe the Issue", hintText: "e.g., The switch is sparking..."),
-            onChanged: (text) => _analyzeComplaint(text),
-          ),
-          SizedBox(height: 20),
-          Container(
-            padding: EdgeInsets.all(12),
-            decoration: BoxDecoration(color: priorityColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: priorityColor)),
-            child: Row(children: [
-              Icon(Icons.analytics, color: priorityColor), SizedBox(width: 10),
-              Expanded(child: Text("AI Priority: $priorityLevel", style: TextStyle(color: priorityColor, fontWeight: FontWeight.bold))),
-            ]),
-          ),
-          SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity, height: 50,
-            child: ElevatedButton(onPressed: submitComplaint, style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent), child: Text("Submit Report")),
-          )
+          SizedBox(height: 15),
+          Text(issue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
         ],
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: EdgeInsets.all(20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("My Tickets", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+              ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D9488), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), icon: Icon(Icons.add, size: 18), label: Text("Raise Ticket"), onPressed: _showRaiseTicketModal)
+            ],
+          ),
+        ),
+        Expanded(
+          child: isLoading ? Center(child: CircularProgressIndicator()) : myComplaints.isEmpty ? Center(child: Text("No tickets raised yet.", style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
+                padding: EdgeInsets.symmetric(horizontal: 20), itemCount: myComplaints.length,
+                itemBuilder: (context, index) {
+                  var c = myComplaints[index];
+                  String rawIssue = c['issue'].toString();
+                  bool isHigh = rawIssue.contains('[HIGH');
+                  String cleanIssue = rawIssue.replaceAll(RegExp(r'\[.*?\] '), ''); 
+                  return _buildStudentTicketCard(
+                    ticketId: "TCK-${100 + index}", priority: isHigh ? "HIGH" : "MEDIUM",
+                    category: c['category'].toString().toUpperCase(), issue: cleanIssue, isHighPriority: isHigh,
+                    currentStatus: c['status'] ?? "Pending",
+                  );
+                }
+              ),
+        )
+      ],
+    );
+  }
 }
+
+  
 
 // 3. MESS MENU PAGE
 // 3. MESS MENU PAGE (UPDATED ACCORDION UI)

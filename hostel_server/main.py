@@ -28,7 +28,8 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS passes (student_id TEXT, reason TEXT, time TEXT, status TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS notices (title TEXT, message TEXT, image_path TEXT, date TEXT)''')
     # Updated: Added student_name column
-    c.execute('''CREATE TABLE IF NOT EXISTS complaints (student_id TEXT, student_name TEXT, issue TEXT, category TEXT, room TEXT)''')
+    # Look for your complaints table in init_db() and replace it with this:
+    c.execute('''CREATE TABLE IF NOT EXISTS complaints (student_id TEXT, student_name TEXT, issue TEXT, category TEXT, room TEXT, status TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS attendance (student_id TEXT, status TEXT, time TEXT, location TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS ratings (student_id TEXT, meal TEXT, rating INTEGER)''')
     c.execute("SELECT COUNT(*) FROM users")
@@ -137,13 +138,29 @@ def get_notices():
 
 # UPDATED COMPLAINT ROUTE
 @app.post("/create-complaint")
-def create_complaint(data: ComplaintRequest):
+def create_complaint(data: dict): # Assuming you are using a dict or Pydantic model
     conn = sqlite3.connect("hostel.db")
-    # Now storing student_name as well
-    conn.execute("INSERT INTO complaints VALUES (?, ?, ?, ?, ?)", 
-                 (data.student_id, data.student_name, data.issue, data.category, data.room_number))
+    c = conn.cursor()
+    # Notice the extra "Pending" added at the end!
+    c.execute("INSERT INTO complaints VALUES (?, ?, ?, ?, ?, ?)", 
+              (data['student_id'], data['student_name'], data['issue'], data['category'], data['room_number'], "Pending"))
     conn.commit()
-    return {"status": "Logged"}
+    conn.close()
+    return {"status": "success"}
+
+class UpdateComplaintRequest(BaseModel):
+    student_id: str
+    issue: str
+    status: str
+
+@app.post("/update-complaint")
+def update_complaint(data: UpdateComplaintRequest):
+    conn = sqlite3.connect("hostel.db")
+    c = conn.cursor()
+    c.execute("UPDATE complaints SET status = ? WHERE student_id = ? AND issue = ?", (data.status, data.student_id, data.issue))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
 
 @app.get("/get-complaints")
 def get_complaints():

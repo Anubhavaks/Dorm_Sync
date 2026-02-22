@@ -20,6 +20,15 @@ class _WardenPageState extends State<WardenPage> {
   List<dynamic> attendance = [];
   List<dynamic> complaints = [];
   List<dynamic> foodRatings = [];
+  // --- MOCK STUDENT DIRECTORY DATA ---
+  final List<Map<String, dynamic>> studentDirectory = [
+    {"id": "S101", "name": "Aarav Patel", "room": "101A", "course": "B.Tech CS, 2nd Year", "status": "Present", "feePaid": true, "phone": "+91 98765 43210", "attendance": 0.92},
+    {"id": "S102", "name": "Rahul Sharma", "room": "101B", "course": "B.Tech ME, 3rd Year", "status": "On Leave", "feePaid": false, "phone": "+91 98765 43211", "attendance": 0.85},
+    {"id": "S103", "name": "Kabir Das", "room": "102A", "course": "BBA, 1st Year", "status": "Present", "feePaid": true, "phone": "+91 98765 43212", "attendance": 0.98},
+    {"id": "S104", "name": "Neha Gupta", "room": "102B", "course": "B.Arch, 4th Year", "status": "Present", "feePaid": true, "phone": "+91 98765 43213", "attendance": 0.88},
+    {"id": "S105", "name": "Rohan Verma", "room": "103A", "course": "M.Tech, 1st Year", "status": "Present", "feePaid": true, "phone": "+91 98765 43214", "attendance": 0.95},
+    {"id": "S106", "name": "Aditya Singh", "room": "103B", "course": "B.Tech CS, 2nd Year", "status": "Present", "feePaid": false, "phone": "+91 98765 43215", "attendance": 0.75},
+  ];
   bool isLoading = true;
 
   @override
@@ -48,6 +57,19 @@ class _WardenPageState extends State<WardenPage> {
       print("Error: $e"); 
       setState(() => isLoading = false);
     }
+  }
+
+  Future<void> updateComplaintStatus(String studentId, String issue, String newStatus) async {
+    String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/update-complaint'),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"student_id": studentId, "issue": issue, "status": newStatus}),
+      );
+      refreshData(); // Refresh the screen instantly!
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ticket marked as $newStatus"), backgroundColor: Color(0xFF0D9488)));
+    } catch (e) { print(e); }
   }
 
   Future<void> updatePassStatus(String studentId, String time, String newStatus) async {
@@ -125,6 +147,33 @@ class _WardenPageState extends State<WardenPage> {
     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => LoginPage()), (route) => false);
   }
 
+  // --- MISSING DASHBOARD STAT CARD WIDGET ADDED HERE ---
+  Widget _buildStatCard(IconData icon, Color color, String title, String value, String suffix, {bool hasAlert = false}) {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade200)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(padding: EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color)),
+              if (hasAlert) Icon(Icons.warning, color: Colors.red)
+            ],
+          ),
+          SizedBox(height: 15),
+          Text(title, style: TextStyle(color: Colors.grey, fontSize: 14)),
+          SizedBox(height: 5),
+          RichText(text: TextSpan(children: [
+            TextSpan(text: value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
+            TextSpan(text: suffix, style: TextStyle(color: Colors.grey, fontSize: 14))
+          ]))
+        ],
+      ),
+    );
+  }
+
   // --- DYNAMIC VIEW SWITCHER ---
   Widget _buildMainContent() {
     if (isLoading) return Center(child: CircularProgressIndicator());
@@ -136,7 +185,10 @@ class _WardenPageState extends State<WardenPage> {
       int activeComplaints = complaints.length;
       double optimizedRice = (presentCount * 0.4) * 0.6;
       double optimizedDal = (presentCount * 0.4) * 0.4;
-      var urgentComplaint = complaints.firstWhere((c) => c['issue'].toString().contains('[HIGH PRIORITY') || c['issue'].toString().toLowerCase().contains('fire'), orElse: () => null);
+      var urgentComplaint = complaints.cast<Map<String, dynamic>?>().firstWhere(
+        (c) => c != null && (c['issue'].toString().contains('[HIGH') || c['issue'].toString().toLowerCase().contains('fire')), 
+        orElse: () => null
+      );
 
       return SingleChildScrollView(
         padding: EdgeInsets.all(40),
@@ -242,23 +294,73 @@ class _WardenPageState extends State<WardenPage> {
     }
 
     else if (_selectedMenu == 2) {
-      // 3. ALL ISSUES/COMPLAINTS LIST
-      return ListView.builder(
+      // 3. MAINTENANCE & COMPLAINTS (TABBED UI)
+      return Padding(
         padding: EdgeInsets.all(40),
-        itemCount: complaints.length,
-        itemBuilder: (context, index) {
-          var c = complaints[index];
-          bool isHighPriority = c['issue'].toString().contains('[HIGH');
-          return Card(
-            margin: EdgeInsets.only(bottom: 10),
-            color: isHighPriority ? Colors.red.shade50 : Colors.white,
-            child: ListTile(
-              leading: Icon(Icons.build, color: isHighPriority ? Colors.red : Colors.indigo),
-              title: Text(c['issue'], style: TextStyle(fontWeight: isHighPriority ? FontWeight.bold : FontWeight.normal)),
-              subtitle: Text("Room: ${c['room']} | Category: ${c['category']}"),
-            ),
-          );
-        }
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Maintenance & Complaints", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+                      SizedBox(height: 5),
+                      Text("Ticketing system to track and resolve student issues.", style: TextStyle(color: Colors.blueGrey, fontSize: 14)),
+                    ],
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              TabBar(
+                isScrollable: true,
+                labelColor: Color(0xFF0D9488),
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Color(0xFF0D9488),
+                indicatorWeight: 3,
+                labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                tabs: [Tab(text: "Open & In Progress"), Tab(text: "Resolved")],
+              ),
+              SizedBox(height: 20),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    // TAB 1: OPEN TICKETS
+                    // TAB 1: OPEN TICKETS
+                    ListView.builder(
+                      itemCount: complaints.length,
+                      itemBuilder: (context, index) {
+                        var c = complaints[index];
+                        String rawIssue = c['issue'].toString();
+                        bool isHigh = rawIssue.contains('[HIGH');
+                        String cleanIssue = rawIssue.replaceAll(RegExp(r'\[.*?\] '), ''); 
+                        
+                        return _buildTicketCard(
+                          ticketId: "TCK-${100 + index}", 
+                          priority: isHigh ? "HIGH" : "MEDIUM",
+                          category: c['category'].toString().toUpperCase(),
+                          issue: cleanIssue,   
+                          rawIssue: rawIssue,  // <-- THIS LINKS IT ALL TOGETHER
+                          studentName: c['student_name'] ?? "Student",
+                          room: c['room'],
+                          isHighPriority: isHigh,
+                          studentId: c['student_id'],              
+                          currentStatus: c['status'] ?? "Pending", 
+                        );
+                      }
+                    ),
+                    // TAB 2: RESOLVED TICKETS
+                    Center(child: Text("No resolved tickets yet.", style: TextStyle(color: Colors.grey))),
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
       );
     }
 
@@ -279,6 +381,77 @@ class _WardenPageState extends State<WardenPage> {
             ),
           );
         }
+      );
+    }
+
+    else if (_selectedMenu == 4) {
+      // 5. STUDENT DIRECTORY (GRID UI)
+      return Padding(
+        padding: EdgeInsets.all(40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Student Directory", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+                    SizedBox(height: 5),
+                    Text("Interactive directory with instant search and filtering.", style: TextStyle(color: Colors.blueGrey, fontSize: 14)),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Container(
+                      width: 250, height: 40,
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+                      child: TextField(decoration: InputDecoration(hintText: "Search name or room...", prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 10))),
+                    ),
+                    SizedBox(width: 15),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D9488), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)),
+                      icon: Icon(Icons.add, size: 18), label: Text("Add Student", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () {},
+                    )
+                  ],
+                )
+              ],
+            ),
+            SizedBox(height: 20),
+            
+            // Filter Pills
+            Row(
+              children: [
+                Chip(label: Text("All Students", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: Color(0xFF1F2937), side: BorderSide.none),
+                SizedBox(width: 10),
+                Chip(label: Text("B.Tech Only", style: TextStyle(color: Colors.blueGrey)), backgroundColor: Colors.white, side: BorderSide(color: Colors.grey.shade300)),
+                SizedBox(width: 10),
+                Chip(label: Text("Fee Pending", style: TextStyle(color: Colors.blueGrey)), backgroundColor: Colors.white, side: BorderSide(color: Colors.grey.shade300)),
+                SizedBox(width: 10),
+                Chip(label: Text("On Leave", style: TextStyle(color: Colors.blueGrey)), backgroundColor: Colors.white, side: BorderSide(color: Colors.grey.shade300)),
+              ],
+            ),
+            SizedBox(height: 20),
+
+            // Grid View
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 350, // Card width
+                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 20,
+                  childAspectRatio: 1.1, // Adjusts card height
+                ),
+                itemCount: studentDirectory.length,
+                itemBuilder: (context, index) {
+                  return _buildDirectoryCard(studentDirectory[index]);
+                },
+              ),
+            )
+          ],
+        ),
       );
     }
 
@@ -316,6 +489,9 @@ class _WardenPageState extends State<WardenPage> {
                 _buildMenuItem(2, Icons.warning_amber_rounded, "All Issues"),
                 SizedBox(height: 10),
                 _buildMenuItem(3, Icons.restaurant, "Food Ratings"),
+                SizedBox(height: 30),
+                // 👇 ADD THIS NEW BUTTON 👇
+                _buildMenuItem(4, Icons.people_alt, "Student Directory"),
                 SizedBox(height: 30),
                 
                 // POST NOTICE BUTTON
@@ -356,22 +532,234 @@ class _WardenPageState extends State<WardenPage> {
     );
   }
 
-  Widget _buildStatCard(IconData icon, Color iconColor, String title, String mainValue, String subValue, {bool hasAlert = false}) {
+  // 1. Add rawIssue here
+  Widget _buildTicketCard({
+    required String ticketId, 
+    required String priority, 
+    required String category, 
+    required String issue, 
+    required String rawIssue, // <-- ADDED BACK HERE
+    required String studentName, 
+    required String studentId, 
+    required String room, 
+    required bool isHighPriority, 
+    required String currentStatus
+  }) {
+    Color priorityColor = isHighPriority ? Colors.red.shade700 : Colors.orange.shade700;
+    Color priorityBg = isHighPriority ? Colors.red.shade50 : Colors.orange.shade50;
+
     return Container(
-      padding: EdgeInsets.all(25), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
-      child: Stack(
+      margin: EdgeInsets.only(bottom: 15), padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: iconColor), SizedBox(height: 15),
-              Text(title, style: TextStyle(color: Colors.blueGrey, fontSize: 14)), SizedBox(height: 5),
-              Row(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(mainValue, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF111827))), Text(subValue, style: TextStyle(fontSize: 16, color: Colors.grey))])
-            ],
+          Container(padding: EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle), child: Icon(isHighPriority ? Icons.hourglass_bottom : Icons.warning_amber_rounded, color: Colors.blueGrey, size: 20)),
+          SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(ticketId, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)), SizedBox(width: 10),
+                  Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: priorityBg, borderRadius: BorderRadius.circular(4)), child: Text(priority, style: TextStyle(color: priorityColor, fontSize: 10, fontWeight: FontWeight.bold))), SizedBox(width: 10),
+                  Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)), child: Text(category, style: TextStyle(color: Colors.blueGrey, fontSize: 10, fontWeight: FontWeight.bold))),
+                ]),
+                SizedBox(height: 10),
+                Text(issue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))), SizedBox(height: 5),
+                RichText(text: TextSpan(style: TextStyle(color: Colors.grey, fontSize: 12), children: [TextSpan(text: "Reported by "), TextSpan(text: studentName, style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)), TextSpan(text: " (Room $room)")]))
+              ],
+            ),
           ),
-          if (hasAlert) Positioned(right: 0, top: 0, child: Container(width: 10, height: 10, decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle)))
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                height: 35, padding: EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: ["Pending", "In Progress", "Resolved"].contains(currentStatus) ? currentStatus : "Pending",
+                    icon: Icon(Icons.keyboard_arrow_down, size: 16), style: TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold),
+                    items: ["Pending", "In Progress", "Resolved"].map((String value) { return DropdownMenuItem<String>(value: value, child: Text(value)); }).toList(),
+                    onChanged: (newValue) { 
+                      if (newValue != null && newValue != currentStatus) { 
+                        // <-- DATABASE UPDATE NOW USES rawIssue!
+                        updateComplaintStatus(studentId, rawIssue, newValue); 
+                      } 
+                    },
+                  ),
+                ),
+              ),
+              SizedBox(height: 10),
+              OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.blueGrey, side: BorderSide(color: Colors.grey.shade300), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: EdgeInsets.symmetric(horizontal: 15, vertical: 0), minimumSize: Size(0, 35)), onPressed: () {}, child: Text("Assign Staff", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))
+            ],
+          )
         ],
       ),
+    );
+  }
+  // --- DIRECTORY CARD UI ---
+  Widget _buildDirectoryCard(Map<String, dynamic> student) {
+    bool isPresent = student['status'] == "Present";
+    bool isPaid = student['feePaid'];
+
+    Widget cardContent = Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 5)]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(radius: 25, backgroundColor: Colors.indigo.shade50, child: Icon(Icons.person, color: Colors.indigo, size: 30)),
+              SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(student['name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+                    Text(student['id'], style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    SizedBox(height: 5),
+                    Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4)), child: Text("ROOM ${student['room']}", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey))),
+                  ],
+                ),
+              )
+            ],
+          ),
+          Spacer(),
+          Row(children: [Icon(Icons.school, size: 14, color: Colors.blueGrey), SizedBox(width: 5), Text(student['course'], style: TextStyle(fontSize: 12, color: Colors.blueGrey))]),
+          SizedBox(height: 8),
+          Row(children: [Icon(Icons.location_on, size: 14, color: isPresent ? Colors.green : Colors.orange), SizedBox(width: 5), Text("Status: ", style: TextStyle(fontSize: 12, color: Colors.grey)), Text(student['status'], style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isPresent ? Colors.green : Colors.orange))]),
+          SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(child: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.blueGrey, side: BorderSide(color: Colors.grey.shade300)), onPressed: () => _showStudentProfileModal(student), child: Text("View Profile", style: TextStyle(fontWeight: FontWeight.bold)))),
+              SizedBox(width: 10),
+              Container(decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(4)), child: IconButton(icon: Icon(Icons.mail_outline, size: 20, color: Colors.blueGrey), onPressed: (){})),
+            ],
+          )
+        ],
+      ),
+    );
+
+    // Adds the diagonal "UNPAID" ribbon if fee is not paid
+    if (!isPaid) {
+      return ClipRect(
+        child: Banner(
+          message: "UNPAID", location: BannerLocation.topEnd, color: Colors.red.shade600,
+          textStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1),
+          child: cardContent,
+        ),
+      );
+    }
+    return cardContent;
+  }
+
+  // --- DETAILED PROFILE MODAL ---
+  void _showStudentProfileModal(Map<String, dynamic> student) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: 500, padding: EdgeInsets.all(30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Student Profile", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.pop(context))
+                  ],
+                ),
+                SizedBox(height: 20),
+                Row(
+                  children: [
+                    CircleAvatar(radius: 40, backgroundColor: Colors.indigo.shade50, child: Icon(Icons.person, color: Colors.indigo, size: 50)),
+                    SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(student['name'], style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(20)), child: Text(student['id'], style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))]),
+                          SizedBox(height: 5),
+                          Text(student['course'], style: TextStyle(color: Colors.blueGrey)),
+                          SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Container(padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(4)), child: Row(children: [Icon(Icons.bed, size: 14, color: Colors.teal), SizedBox(width: 5), Text("Room ${student['room']}", style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12))])),
+                              SizedBox(width: 10),
+                              Text(student['status'], style: TextStyle(color: student['status'] == 'Present' ? Colors.green : Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                            ],
+                          )
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+                SizedBox(height: 30),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Contact Info Column
+                    Expanded(
+                      child: Container(
+                        padding: EdgeInsets.all(20), decoration: BoxDecoration(color: Color(0xFFF9FAFB), borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade200)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("CONTACT INFORMATION", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                            SizedBox(height: 15),
+                            Row(children: [Icon(Icons.phone_iphone, size: 16, color: Colors.blueGrey), SizedBox(width: 10), Text(student['phone'], style: TextStyle(fontWeight: FontWeight.bold))]),
+                            SizedBox(height: 10),
+                            Row(children: [Icon(Icons.email_outlined, size: 16, color: Colors.blueGrey), SizedBox(width: 10), Text("${student['id'].toString().toLowerCase()}@university.edu", style: TextStyle(color: Colors.blueGrey))]),
+                            SizedBox(height: 25),
+                            Text("GUARDIAN DETAILS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                            SizedBox(height: 15),
+                            Row(children: [Icon(Icons.face, size: 16, color: Colors.orange), SizedBox(width: 10), Text("Rajesh ${student['name'].split(' ').last}", style: TextStyle(fontWeight: FontWeight.bold))]),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    // Status Column
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(20), decoration: BoxDecoration(color: student['feePaid'] ? Colors.green.shade50 : Colors.red.shade50, borderRadius: BorderRadius.circular(15), border: Border.all(color: student['feePaid'] ? Colors.green.shade200 : Colors.red.shade200)),
+                            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("FEE STATUS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: student['feePaid'] ? Colors.green.shade700 : Colors.red.shade700, letterSpacing: 1)), SizedBox(height: 5), Text(student['feePaid'] ? "Paid" : "Pending", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: student['feePaid'] ? Colors.green.shade700 : Colors.red.shade700))]),
+                              Icon(Icons.account_balance_wallet, color: student['feePaid'] ? Colors.green : Colors.red, size: 30)
+                            ]),
+                          ),
+                          SizedBox(height: 20),
+                          Container(
+                            padding: EdgeInsets.all(20), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(15)),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text("HOSTEL ATTENDANCE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                              SizedBox(height: 10),
+                              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                Text("${(student['attendance'] * 100).toInt()}%", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 100, child: LinearProgressIndicator(value: student['attendance'], backgroundColor: Colors.grey.shade200, color: Color(0xFF0D9488), minHeight: 8, borderRadius: BorderRadius.circular(4)))
+                              ]),
+                            ]),
+                          ),
+                          SizedBox(height: 20),
+                          SizedBox(width: double.infinity, height: 45, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D9488), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: (){}, child: Text("Edit Profile Details", style: TextStyle(fontWeight: FontWeight.bold))))
+                        ],
+                      ),
+                    )
+                  ],
+                )
+              ],
+            ),
+          ),
+        );
+      }
     );
   }
 }
