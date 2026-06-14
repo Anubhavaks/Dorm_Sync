@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'main.dart'; 
 
+// 🌍 GLOBAL CLOUD URL
+const String baseUrl = "https://dorm-sync.onrender.com";
+
 class WardenPage extends StatefulWidget {
   @override
   _WardenPageState createState() => _WardenPageState();
@@ -39,7 +42,6 @@ class _WardenPageState extends State<WardenPage> {
 
   Future<void> refreshData() async {
     setState(() => isLoading = true);
-    String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000"; 
     try {
       var r1 = await http.get(Uri.parse('$baseUrl/get-passes'));
       var r2 = await http.get(Uri.parse('$baseUrl/get-attendance'));
@@ -60,7 +62,6 @@ class _WardenPageState extends State<WardenPage> {
   }
 
   Future<void> updateComplaintStatus(String studentId, String issue, String newStatus) async {
-  String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
   try {
     var response = await http.post(
       Uri.parse('$baseUrl/update-complaint'),
@@ -82,7 +83,6 @@ class _WardenPageState extends State<WardenPage> {
 }
 
   Future<void> updatePassStatus(String studentId, String time, String newStatus) async {
-    String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
     try {
       await http.post(
         Uri.parse('$baseUrl/update-pass'),
@@ -128,8 +128,7 @@ class _WardenPageState extends State<WardenPage> {
             TextButton(onPressed: () => Navigator.pop(context), child: Text("Cancel")),
             ElevatedButton(
               onPressed: () async {
-                String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2"; 
-                var uri = Uri.parse('http://$ip:8000/post-notice'); 
+                var uri = Uri.parse('$baseUrl/post-notice'); 
                 var request = http.MultipartRequest('POST', uri);
                 request.fields['title'] = titleController.text;
                 request.fields['message'] = msgController.text;
@@ -220,7 +219,6 @@ class _WardenPageState extends State<WardenPage> {
                 Expanded(child: _buildStatCard(Icons.person_outline, Colors.green, "Students Present", presentCount.toString(), " / 400")),
                 SizedBox(width: 20),
                 Expanded(child: _buildStatCard(Icons.qr_code_scanner, Colors.indigo, "Pending Passes", pendingPasses.toString(), "")),
-                SizedBox(width: 20),
                 Expanded(child: _buildStatCard(Icons.build_outlined, Colors.red, "Active Complaints", activeComplaints.toString(), "", hasAlert: urgentComplaint != null)),
               ],
             ),
@@ -338,7 +336,6 @@ class _WardenPageState extends State<WardenPage> {
               Expanded(
                 child: TabBarView(
                   children: [
-                    // TAB 1: OPEN TICKETS
                     // TAB 1: OPEN TICKETS
                     ListView.builder(
                       itemCount: complaints.length,

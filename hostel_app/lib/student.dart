@@ -8,6 +8,9 @@ import 'dart:io';
 import 'main.dart'; 
 import 'package:geolocator/geolocator.dart';
 
+// 🌍 GLOBAL CLOUD URL
+const String baseUrl = "https://dorm-sync.onrender.com";
+
 class StudentDashboard extends StatefulWidget {
   final String studentId;
   StudentDashboard({required this.studentId});
@@ -60,8 +63,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     final XFile? photo = await picker.pickImage(source: ImageSource.camera, preferredCameraDevice: CameraDevice.front);
     
     if (photo != null) {
-      String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-      var url = Uri.parse('http://$ip:8000/mark-attendance');
+      var url = Uri.parse('$baseUrl/mark-attendance');
       
       try {
         await http.post(
@@ -228,7 +230,6 @@ class _StudentDashboardState extends State<StudentDashboard> {
 // YOUR PREVIOUS WORKING MODULES
 // ==========================================
 
-// 1. GATE PASS PAGE
 // 1. GATE PASS PAGE (UPDATED WITH DATE & TIME PICKERS)
 class GatePassPage extends StatefulWidget {
   final String studentId;
@@ -247,20 +248,17 @@ class _GatePassPageState extends State<GatePassPage> {
   @override void initState() { super.initState(); fetchMyPasses(); }
 
   Future<void> fetchMyPasses() async {
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-    var response = await http.get(Uri.parse('http://$ip:8000/get-passes'));
+    var response = await http.get(Uri.parse('$baseUrl/get-passes'));
     var allPasses = jsonDecode(response.body);
     setState(() { myPasses = allPasses.where((p) => p['student_id'] == widget.studentId).toList(); });
   }
 
   Future<void> submitPass() async {
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-    
     // Combine Date and Time for the backend
     String combinedOut = "${outDateController.text} at ${outTimeController.text}";
     String combinedIn = "${inDateController.text} at ${inTimeController.text}";
 
-    await http.post(Uri.parse('http://$ip:8000/request-pass'), headers: {"Content-Type": "application/json"},
+    await http.post(Uri.parse('$baseUrl/request-pass'), headers: {"Content-Type": "application/json"},
       body: jsonEncode({
         "student_id": widget.studentId, 
         "reason": reasonController.text, 
@@ -344,7 +342,6 @@ class _GatePassPageState extends State<GatePassPage> {
   }
 }
 
-// 2. AI MAINTENANCE PAGE
 // 2. AI MAINTENANCE PAGE (STUDENT TICKETING UI)
 
 class MaintenancePage extends StatefulWidget {
@@ -372,18 +369,15 @@ class _MaintenancePageState extends State<MaintenancePage> {
   if (!mounted) return;
   setState(() => isLoading = true);
   
-  String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2"; 
   try {
-    var response = await http.get(Uri.parse('http://$ip:8000/get-complaints'));
+    var response = await http.get(Uri.parse('$baseUrl/get-complaints'));
     if (response.statusCode == 200) {
       List<dynamic> allData = jsonDecode(response.body);
       
-      // DEBUG: Look at your console to see if data is actually arriving!
       print("DATABASE DATA: $allData");
       print("SEARCHING FOR ID: ${widget.studentId}");
 
       setState(() {
-        // We use .trim() and .toLowerCase() to prevent "S101" vs "s101" errors
         myComplaints = allData.where((c) => 
           c['student_id'].toString().trim().toLowerCase() == 
           widget.studentId.trim().toLowerCase()
@@ -409,8 +403,7 @@ class _MaintenancePageState extends State<MaintenancePage> {
   }
 
   Future<void> submitComplaint() async {
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2"; 
-    var url = Uri.parse('http://$ip:8000/create-complaint');
+    var url = Uri.parse('$baseUrl/create-complaint');
     String finalIssue = "[$priorityLevel] ${issueController.text}";
     try {
       var response = await http.post(url, headers: {"Content-Type": "application/json"},
@@ -426,7 +419,6 @@ class _MaintenancePageState extends State<MaintenancePage> {
         fetchMyComplaints(); // This refreshes the list so the new ticket appears!
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ticket Raised!"), backgroundColor: Color(0xFF0D9488)));
         issueController.clear();
-        fetchMyComplaints(); 
       }
     } catch (e) { print(e); }
   }
@@ -545,15 +537,13 @@ class _MaintenancePageState extends State<MaintenancePage> {
 
   
 
-// 3. MESS MENU PAGE
 // 3. MESS MENU PAGE (UPDATED ACCORDION UI)
 class MessMenuPage extends StatelessWidget {
   final String studentId;
   MessMenuPage({required this.studentId});
 
   Future<void> submitRating(BuildContext context, String meal, int rating) async {
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-    var url = Uri.parse('http://$ip:8000/rate-food');
+    var url = Uri.parse('$baseUrl/rate-food');
     try {
       await http.post(url, headers: {"Content-Type": "application/json"},
         body: jsonEncode({"student_id": studentId, "meal": meal, "rating": rating}));
