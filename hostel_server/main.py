@@ -7,6 +7,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+@app.get("/")
+def home():
+    return {"message": "Dorm_Sync API is Live and Running! 🚀 Go to /docs to view the dashboard."}
 
 # Enable CORS for Mobile/Web
 app.add_middleware(
