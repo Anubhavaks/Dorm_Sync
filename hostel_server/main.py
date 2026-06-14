@@ -5,6 +5,55 @@ import os
 import shutil
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from google import genai
+from google.genai import types
+
+app = FastAPI()
+
+# Initialize the Gemini Client
+# It automatically picks up the GEMINI_API_KEY environment variable
+client = genai.Client()
+
+# Define what the Flutter app sends us
+class ComplaintInput(BaseModel):
+    raw_text: str
+
+# Define a clean Structured Output model for Gemini to return
+class AnalyzedComplaint(BaseModel):
+    category: str  # e.g., Electricity, Plumbing, Carpentry, Cleanliness
+    severity: str  # e.g., Low, Medium, High, Critical
+    summary: str   # A clean, short title/summary of the issue
+    estimated_days: int # Suggested turnaround time
+
+@app.post("/analyze-complaint", response_model=AnalyzedComplaint)
+def analyze_hostel_complaint(data: ComplaintInput):
+    try:
+        prompt = f"""
+        You are an AI assistant for a university hostel management system. 
+        Analyze the following student complaint and extract the structural details accurately.
+        
+        Student Complaint: "{data.raw_text}"
+        """
+        
+        # Call Gemini 2.5 Flash with Structured Outputs enforced
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=AnalyzedComplaint,
+                temperature=0.1,  # Low temperature for precise, consistent data
+            ),
+        )
+        
+        # The response.text is guaranteed to match the AnalyzedComplaint schema perfectly
+        return AnalyzedComplaint.model_validate_json(response.text)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
 
 app = FastAPI()
 @app.get("/")
