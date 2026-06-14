@@ -369,17 +369,33 @@ class _MaintenancePageState extends State<MaintenancePage> {
   }
 
   Future<void> fetchMyComplaints() async {
-    setState(() => isLoading = true);
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-    try {
-      var response = await http.get(Uri.parse('http://$ip:8000/get-complaints'));
-      var allComplaints = jsonDecode(response.body);
+  if (!mounted) return;
+  setState(() => isLoading = true);
+  
+  String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2"; 
+  try {
+    var response = await http.get(Uri.parse('http://$ip:8000/get-complaints'));
+    if (response.statusCode == 200) {
+      List<dynamic> allData = jsonDecode(response.body);
+      
+      // DEBUG: Look at your console to see if data is actually arriving!
+      print("DATABASE DATA: $allData");
+      print("SEARCHING FOR ID: ${widget.studentId}");
+
       setState(() {
-        myComplaints = allComplaints.where((c) => c['student_id'] == widget.studentId).toList();
+        // We use .trim() and .toLowerCase() to prevent "S101" vs "s101" errors
+        myComplaints = allData.where((c) => 
+          c['student_id'].toString().trim().toLowerCase() == 
+          widget.studentId.trim().toLowerCase()
+        ).toList();
         isLoading = false;
       });
-    } catch (e) { print(e); setState(() => isLoading = false); }
+    }
+  } catch (e) { 
+    print("FETCH ERROR: $e");
+    setState(() => isLoading = false); 
   }
+}
 
   void _analyzeComplaint(String text) {
     text = text.toLowerCase();
@@ -407,6 +423,7 @@ class _MaintenancePageState extends State<MaintenancePage> {
         }));
       if (response.statusCode == 200) {
         Navigator.pop(context); 
+        fetchMyComplaints(); // This refreshes the list so the new ticket appears!
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ticket Raised!"), backgroundColor: Color(0xFF0D9488)));
         issueController.clear();
         fetchMyComplaints(); 

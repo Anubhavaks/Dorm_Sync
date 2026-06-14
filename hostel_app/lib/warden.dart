@@ -60,17 +60,26 @@ class _WardenPageState extends State<WardenPage> {
   }
 
   Future<void> updateComplaintStatus(String studentId, String issue, String newStatus) async {
-    String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
-    try {
-      await http.post(
-        Uri.parse('$baseUrl/update-complaint'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"student_id": studentId, "issue": issue, "status": newStatus}),
+  String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
+  try {
+    var response = await http.post(
+      Uri.parse('$baseUrl/update-complaint'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "student_id": studentId, 
+        "issue": issue, // This must be the rawIssue we fixed earlier
+        "status": newStatus
+      }),
+    );
+    
+    if (response.statusCode == 200) {
+      refreshData(); // Updates Warden's UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Status Updated to $newStatus"), backgroundColor: Color(0xFF0D9488))
       );
-      refreshData(); // Refresh the screen instantly!
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Ticket marked as $newStatus"), backgroundColor: Color(0xFF0D9488)));
-    } catch (e) { print(e); }
-  }
+    }
+  } catch (e) { print("WARDEN UPDATE ERROR: $e"); }
+}
 
   Future<void> updatePassStatus(String studentId, String time, String newStatus) async {
     String baseUrl = kIsWeb ? "http://127.0.0.1:8000" : "http://10.0.2.2:8000";
