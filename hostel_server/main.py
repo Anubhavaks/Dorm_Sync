@@ -1,64 +1,15 @@
-from fastapi import FastAPI, File, UploadFile, Form
-from pydantic import BaseModel
-import sqlite3
 import os
+import sqlite3
 import shutil
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-import os
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from google import genai
 from google.genai import types
 
+# --- INITIALIZATION ---
 app = FastAPI()
-
-# Initialize the Gemini Client
-# It automatically picks up the GEMINI_API_KEY environment variable
-client = genai.Client()
-
-# Define what the Flutter app sends us
-class ComplaintInput(BaseModel):
-    raw_text: str
-
-# Define a clean Structured Output model for Gemini to return
-class AnalyzedComplaint(BaseModel):
-    category: str  # e.g., Electricity, Plumbing, Carpentry, Cleanliness
-    severity: str  # e.g., Low, Medium, High, Critical
-    summary: str   # A clean, short title/summary of the issue
-    estimated_days: int # Suggested turnaround time
-
-@app.post("/analyze-complaint", response_model=AnalyzedComplaint)
-def analyze_hostel_complaint(data: ComplaintInput):
-    try:
-        prompt = f"""
-        You are an AI assistant for a university hostel management system. 
-        Analyze the following student complaint and extract the structural details accurately.
-        
-        Student Complaint: "{data.raw_text}"
-        """
-        
-        # Call Gemini 2.5 Flash with Structured Outputs enforced
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=AnalyzedComplaint,
-                temperature=0.1,  # Low temperature for precise, consistent data
-            ),
-        )
-        
-        # The response.text is guaranteed to match the AnalyzedComplaint schema perfectly
-        return AnalyzedComplaint.model_validate_json(response.text)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
-
-app = FastAPI()
-@app.get("/")
-def home():
-    return {"message": "Dorm_Sync API is Live and Running! 🚀 Go to /docs to view the dashboard."}
 
 # Enable CORS for Mobile/Web
 app.add_middleware(
@@ -72,6 +23,9 @@ app.add_middleware(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# Initialize the Gemini Client (picks up GEMINI_API_KEY from Render environment)
+client = genai.Client()
+
 # --- DATABASE SETUP ---
 def init_db():
     conn = sqlite3.connect("hostel.db")
@@ -79,11 +33,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (username TEXT, password TEXT, role TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS passes (student_id TEXT, reason TEXT, time TEXT, status TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS notices (title TEXT, message TEXT, image_path TEXT, date TEXT)''')
-    # Updated: Added student_name column
-    # Look for your complaints table in init_db() and replace it with this:
     c.execute('''CREATE TABLE IF NOT EXISTS complaints (student_id TEXT, student_name TEXT, issue TEXT, category TEXT, room TEXT, status TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS attendance (student_id TEXT, status TEXT, time TEXT, location TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS ratings (student_id TEXT, meal TEXT, rating INTEGER)''')
+    
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO users VALUES ('warden', 'admin123', 'warden')")
@@ -94,7 +47,7 @@ def init_db():
 
 init_db()
 
-# --- DATA MODELS (Updated to match Frontend) ---
+# --- DATA MODELS ---
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -110,16 +63,18 @@ class PassUpdate(BaseModel):
     time: str
     status: str
 
-# UPDATED: Matches your MaintenancePage JSON exactly
 class ComplaintRequest(BaseModel):
     student_id: str
-    student_name: str  # <--- Added this to fix 422 Error
+    student_name: str 
     issue: str
     category: str
     room_number: str
-    # floor: str = None  # Optional: If you send floor, uncomment this
 
-# UPDATED: Matches your AttendancePage JSON exactly
+class UpdateComplaintRequest(BaseModel):
+    student_id: str
+    issue: str
+    status: str
+
 class AttendanceRequest(BaseModel):
     student_id: str
     time: str
@@ -130,18 +85,21 @@ class RatingRequest(BaseModel):
     meal: str
     rating: int
 
+# --- AI MODELS ---
+class AICaughtDetails(BaseModel):
+    category: str  # e.g., Electrical, Plumbing, Carpentry, Cleaning, Other
+    is_high_priority: bool
+
 # --- API ROUTES ---
 
 @app.get("/")
 def home():
-    return {"message": "Hostel Mate AI Server Running"}
+    return {"message": "Dorm_Sync API is Live and Running! 🚀 Go to /docs to view the dashboard."}
 
 @app.post("/login")
 def login(data: LoginRequest):
     conn = sqlite3.connect("hostel.db")
-    # Check the database for the user
     user = conn.execute("SELECT role FROM users WHERE username = ? AND password = ?", (data.username, data.password)).fetchone()
-    
     if user:
         return {"status": "success", "role": user[0], "username": data.username}
     else:
@@ -158,7 +116,6 @@ def request_pass(data: PassRequest):
 @app.get("/get-passes")
 def get_passes():
     conn = sqlite3.connect("hostel.db")
-    # Return structure matches Warden Dashboard expectations
     rows = conn.execute("SELECT * FROM passes").fetchall()
     return [{"student_id": r[0], "reason": r[1], "time": r[2], "status": r[3]} for r in rows]
 
@@ -188,22 +145,49 @@ def get_notices():
     rows = conn.execute("SELECT * FROM notices").fetchall()
     return [{"title": r[0], "message": r[1], "image_path": r[2], "date": r[3]} for r in rows]
 
-# UPDATED COMPLAINT ROUTE
+# 🚀 UPDATED: AI-POWERED COMPLAINT ROUTE
 @app.post("/create-complaint")
-def create_complaint(data: dict): # Assuming you are using a dict or Pydantic model
+def create_complaint(data: ComplaintRequest):
+    # 🧠 1. Intercept the text and pass it to Gemini
+    try:
+        prompt = f"""
+        Analyze this hostel maintenance complaint: "{data.issue}"
+        Determine its correct technical category (e.g., Electrical, Plumbing, Carpentry, Cleaning, Other) 
+        and decide if it qualifies as an urgent hazard (fire, spark, flooding, shock, urgent security issue, etc.).
+        """
+        
+        ai_response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=AICaughtDetails,
+                temperature=0.1,
+            ),
+        )
+        
+        # Parse the structured JSON output from Gemini
+        ai_data = AICaughtDetails.model_validate_json(ai_response.text)
+        
+        # Add the [HIGH PRIORITY] tag if the AI flagged it
+        priority_label = "HIGH PRIORITY (AI Detected)" if ai_data.is_high_priority else "Normal"
+        final_issue_text = f"[{priority_label}] {data.issue}"
+        final_category = ai_data.category
+
+    except Exception as ai_error:
+        print(f"Gemini processing failed: {ai_error}")
+        # Fallback if AI fails (keeps the app from crashing)
+        final_issue_text = f"[Normal] {data.issue}"
+        final_category = data.category
+
+    # 💾 2. Save the enriched complaint to the database
     conn = sqlite3.connect("hostel.db")
     c = conn.cursor()
-    # Notice the extra "Pending" added at the end!
     c.execute("INSERT INTO complaints VALUES (?, ?, ?, ?, ?, ?)", 
-              (data['student_id'], data['student_name'], data['issue'], data['category'], data['room_number'], "Pending"))
+              (data.student_id, data.student_name, final_issue_text, final_category, data.room_number, "Pending"))
     conn.commit()
     conn.close()
-    return {"status": "success"}
-
-class UpdateComplaintRequest(BaseModel):
-    student_id: str
-    issue: str
-    status: str
+    return {"status": "success", "message": "Ticket logged and analyzed!"}
 
 @app.post("/update-complaint")
 def update_complaint(data: UpdateComplaintRequest):
@@ -218,14 +202,12 @@ def update_complaint(data: UpdateComplaintRequest):
 def get_complaints():
     conn = sqlite3.connect("hostel.db")
     rows = conn.execute("SELECT * FROM complaints").fetchall()
-    # Updated return to match the 5 columns
-    return [{"student_id": r[0], "student_name": r[1], "issue": r[2], "category": r[3], "room": r[4]} for r in rows]
+    # Fixed bug: Added r[5] so the status actually goes to the Warden dashboard!
+    return [{"student_id": r[0], "student_name": r[1], "issue": r[2], "category": r[3], "room": r[4], "status": r[5]} for r in rows]
 
-# UPDATED ATTENDANCE ROUTE
 @app.post("/mark-attendance")
 def mark_attendance(data: AttendanceRequest):
     conn = sqlite3.connect("hostel.db")
-    # Saving location now too
     conn.execute("INSERT INTO attendance VALUES (?, ?, ?, ?)", (data.student_id, "Present", data.time, data.location))
     conn.commit()
     return {"status": "Marked"}
