@@ -221,7 +221,15 @@ def create_complaint(data: ComplaintRequest, db: Session = Depends(get_db)):
     return {"status": "success", "message": "Ticket logged and analyzed!"}
 
 @app.post("/update-complaint")
-def update_complaint(data: UpdateComplaintRequest, db: Session = Depends(get_db)):
+def update_complaint(
+    data: UpdateComplaintRequest, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(security.get_current_user)
+):
+    # 🔒 Security Check: Strict administrative lock
+    if current_user["role"] != "warden":
+        raise HTTPException(status_code=403, detail="Access denied. Administrative privileges required.")
+        
     complaint = db.query(models.Complaint).filter(
         models.Complaint.student_id == data.student_id,
         models.Complaint.issue == data.issue
@@ -232,7 +240,7 @@ def update_complaint(data: UpdateComplaintRequest, db: Session = Depends(get_db)
         
     complaint.status = data.status
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Complaint status updated by Warden."}
 
 @app.get("/get-complaints")
 def get_complaints(db: Session = Depends(get_db)):
@@ -246,17 +254,30 @@ def get_complaints(db: Session = Depends(get_db)):
         "status": c.status
     } for c in complaints]
 
+# Note the new `current_user: dict = Depends(security.get_current_user)` parameter!
 @app.post("/mark-attendance")
-def mark_attendance(data: AttendanceRequest, db: Session = Depends(get_db)):
+def mark_attendance(
+    data: AttendanceRequest, 
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(security.get_current_user)
+):
+    # 🔒 Security Check: Ensure the token belongs to a student
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Access denied. Only students can mark attendance.")
+    
+    # 🛡️ Integrity Check: Force the student_id to match the authenticated user's token
+    # This prevents Student_001 from marking attendance for Student_002!
+    authenticated_student = current_user["sub"]
+
     new_attendance = models.Attendance(
-        student_id=data.student_id,
+        student_id=authenticated_student,
         status="Present",
         time=data.time,
         location=data.location
     )
     db.add(new_attendance)
     db.commit()
-    return {"status": "Marked"}
+    return {"status": "Marked", "message": f"Attendance verified for {authenticated_student}"}
 
 @app.get("/get-attendance")
 def get_attendance(db: Session = Depends(get_db)):
@@ -283,13 +304,3 @@ def rate_food(data: RatingRequest, db: Session = Depends(get_db)):
 def get_ratings(db: Session = Depends(get_db)):
     ratings = db.query(models.Rating).all()
     return [{"student_id": r.student_id, "meal": r.meal, "rating": r.rating} for r in ratings]
-
-@app.get("/nuke-users")
-def nuke_users():
-    # 1. Delete the old users table entirely
-    models.User.__table__.drop(engine)
-    # 2. Recreate an empty, fresh users table
-    models.User.__table__.create(engine)
-    # 3. Trigger the seeder to fill it with the new bcrypt hashes
-    seed_initial_users()
-    return {"status": "success", "message": "Insecure users wiped and replaced with secure hashes!"}
