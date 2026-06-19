@@ -1,3 +1,4 @@
+import security
 import os
 import shutil
 from datetime import datetime
@@ -39,9 +40,9 @@ def seed_initial_users():
     try:
         if not db.query(models.User).first():
             db.add_all([
-                models.User(username='warden', password='admin123', role='warden'),
-                models.User(username='Student_001', password='pass123', role='student'),
-                models.User(username='Student_002', password='pass123', role='student')
+                models.User(username='warden', password=security.hash_password('admin123'), role='warden'),
+                models.User(username='Student_001', password=security.hash_password('pass123'), role='student'),
+                models.User(username='Student_002', password=security.hash_password('pass123'), role='student')
             ])
             db.commit()
     except Exception as e:
@@ -102,15 +103,23 @@ def home():
 
 @app.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(
-        models.User.username == data.username, 
-        models.User.password == data.password
-    ).first()
+    # Find the user by username only
+    user = db.query(models.User).filter(models.User.username == data.username).first()
     
-    if user:
-        return {"status": "success", "role": user.role, "username": user.username}
+    # Verify if user exists and if the submitted plain text matches the saved secure hash
+    if user and security.verify_password(data.password, user.password):
+        # Generate a real, cryptographically signed token containing their username and role
+        token = security.create_access_token(data={"sub": user.username, "role": user.role})
+        
+        return {
+            "status": "success", 
+            "role": user.role, 
+            "username": user.username,
+            "access_token": token,
+            "token_type": "bearer"
+        }
     else:
-        return {"status": "fail", "message": "Invalid Credentials"}
+        raise HTTPException(status_code=401, detail="Invalid Credentials")
 
 @app.post("/request-pass")
 def request_pass(data: PassRequest, db: Session = Depends(get_db)):
@@ -274,3 +283,13 @@ def rate_food(data: RatingRequest, db: Session = Depends(get_db)):
 def get_ratings(db: Session = Depends(get_db)):
     ratings = db.query(models.Rating).all()
     return [{"student_id": r.student_id, "meal": r.meal, "rating": r.rating} for r in ratings]
+
+@app.get("/nuke-users")
+def nuke_users():
+    # 1. Delete the old users table entirely
+    models.User.__table__.drop(engine)
+    # 2. Recreate an empty, fresh users table
+    models.User.__table__.create(engine)
+    # 3. Trigger the seeder to fill it with the new bcrypt hashes
+    seed_initial_users()
+    return {"status": "success", "message": "Insecure users wiped and replaced with secure hashes!"}
