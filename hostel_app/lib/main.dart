@@ -1,46 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// Import your pages (Make sure these file names match yours!)
+// Import your pages (File naming conventions verified)
 import 'student.dart'; 
 import 'warden.dart';
 
 void main() async {
-  // Required when doing async work before runApp
+  // Required when performing async initialization tasks prior to running the UI app layout
   WidgetsFlutterBinding.ensureInitialized(); 
   
-  // Check if user is already logged in
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  String? savedRole = prefs.getString('role');
-  String? savedId = prefs.getString('studentId');
+  // Initialize the hardware-backed secure storage vault
+  const secureStorage = FlutterSecureStorage();
+  
+  // Check if a secure active session already exists on boot
+  String? savedRole = await secureStorage.read(key: 'user_role');
+  String? savedId = await secureStorage.read(key: 'username');
+  String? token = await secureStorage.read(key: 'jwt_token');
 
-  // Decide which page to show first
-  Widget initialPage = LoginPage(); // Default
-  if (savedRole == 'warden') {
-    initialPage = WardenPage();
-  } else if (savedRole == 'student' && savedId != null) {
-    initialPage = StudentDashboard(studentId: savedId);
+  // Route calculation based on state session keys
+  Widget initialPage = LoginPage(); 
+  if (token != null && savedRole != null) {
+    if (savedRole == 'warden') {
+      initialPage = WardenPage();
+    } else if (savedRole == 'student' && savedId != null) {
+      initialPage = StudentDashboard(studentId: savedId);
+    }
   }
 
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: initialPage, // <-- Uses the saved state to skip login!
+    home: initialPage, 
     
-    // Your beautiful Material 3 Theme
+    // Enterprise Material 3 Theme Configuration
     theme: ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.light),
-      scaffoldBackgroundColor: Color(0xFFF5F7FA), 
+      scaffoldBackgroundColor: const Color(0xFFF5F7FA), 
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 2,
         shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
         foregroundColor: Colors.indigo,
         elevation: 0,
@@ -52,9 +56,9 @@ void main() async {
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
           elevation: 3,
-          padding: EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -62,17 +66,19 @@ void main() async {
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.indigo, width: 2)),
-        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.indigo, width: 2)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       ),
     ),
   ));
 }
 
 // ==========================================
-// LOGIN PAGE WITH SECURE STORAGE
+// SECURE LOGIN PAGE WITH CRYPTOGRAPHIC STORAGE
 // ==========================================
 class LoginPage extends StatefulWidget {
+  const LoginPage({Key? key}) : super(key: key);
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -80,41 +86,55 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController userController = TextEditingController();
   final TextEditingController passController = TextEditingController();
+  final secureStorage = const FlutterSecureStorage();
   bool isLoading = false;
 
   Future<void> handleLogin() async {
+    if (userController.text.trim().isEmpty || passController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Fields cannot be empty!"), backgroundColor: Colors.orange)
+      );
+      return;
+    }
+
     setState(() { isLoading = true; });
 
-    String ip = kIsWeb ? "127.0.0.1" : "10.0.2.2";
-    var url = Uri.parse('http://$ip:8000/login');
+    // Switched from local testing loop to your live production cloud gateway address
+    var url = Uri.parse('https://dorm-sync.onrender.com/login');
 
     try {
       var response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"username": userController.text, "password": passController.text}),
+        body: jsonEncode({
+          "username": userController.text.trim(), 
+          "password": passController.text.trim()
+        }),
       );
 
       var data = jsonDecode(response.body);
 
-      if (data['status'] == 'success') {
-        // --- SAVE CREDENTIALS LOCALLY ---
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('role', data['role']);
-        await prefs.setString('studentId', data['username']);
+      // Backend now strictly throws 401/error objects or sets a state context message
+      if (response.statusCode == 200 && data['status'] == 'success') {
+        
+        // --- SECURE CRYPTO HARDWARE STORAGE WRITE ---
+        await secureStorage.write(key: 'jwt_token', value: data['access_token']);
+        await secureStorage.write(key: 'user_role', value: data['role']);
+        await secureStorage.write(key: 'username', value: data['username']);
 
-        // --- NAVIGATE ---
+        // --- DASHBOARD ROUTING INTERACTION ---
         if (data['role'] == 'warden') {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => WardenPage()));
         } else {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => StudentDashboard(studentId: data['username'])));
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Invalid Credentials!"), backgroundColor: Colors.red));
+        String errMsg = data['detail'] ?? "Invalid Credentials!";
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg), backgroundColor: Colors.red));
       }
     } catch (e) {
       print(e);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Server Error! Check connection.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Server Error! Check production connection.")));
     }
 
     setState(() { isLoading = false; });
@@ -125,32 +145,32 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.domain, size: 80, color: Colors.indigo),
-              SizedBox(height: 20),
-              Text("Hostel Mate", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo)),
-              SizedBox(height: 40),
+              const Icon(Icons.domain, size: 80, color: Colors.indigo),
+              const SizedBox(height: 20),
+              const Text("Dorm_Sync", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.indigo)),
+              const SizedBox(height: 40),
               
               TextField(
                 controller: userController, 
-                decoration: InputDecoration(labelText: "Username", prefixIcon: Icon(Icons.person))
+                decoration: const InputDecoration(labelText: "Username", prefixIcon: Icon(Icons.person))
               ),
-              SizedBox(height: 15),
+              const SizedBox(height: 15),
               TextField(
                 controller: passController, 
                 obscureText: true, 
-                decoration: InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock))
+                decoration: const InputDecoration(labelText: "Password", prefixIcon: Icon(Icons.lock))
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
               
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: isLoading ? null : handleLogin,
-                  child: isLoading ? CircularProgressIndicator(color: Colors.white) : Text("LOGIN"),
+                  child: isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("LOGIN"),
                 ),
               )
             ],
