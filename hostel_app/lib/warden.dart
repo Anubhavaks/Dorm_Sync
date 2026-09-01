@@ -6,8 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'main.dart'; 
 
 // 🌍 GLOBAL CLOUD URL
-const String baseUrl = "https://dorm-sync.onrender.com";
-
+// Change from Render to Localhost
+const String baseUrl = "http://127.0.0.1:8000";
 class WardenPage extends StatefulWidget {
   const WardenPage({Key? key}) : super(key: key);
 
@@ -370,7 +370,8 @@ class _WardenPageState extends State<WardenPage> {
                           room: c['room'],
                           isHighPriority: isHigh,
                           studentId: c['student_id'],              
-                          currentStatus: c['status'] ?? "Pending", 
+                          currentStatus: c['status'] ?? "Pending",
+                          assignedTo: c['assigned_to']?.toString() ?? "Unassigned", // 👈 ADD THIS HERE 
                         );
                       }
                     ),
@@ -553,7 +554,8 @@ class _WardenPageState extends State<WardenPage> {
     required String studentId, 
     required String room, 
     required bool isHighPriority, 
-    required String currentStatus
+    required String currentStatus,
+    required String assignedTo // 👈 Must be INSIDE the closing brace }
   }) {
     Color priorityColor = isHighPriority ? Colors.red.shade700 : Colors.orange.shade700;
     Color priorityBg = isHighPriority ? Colors.red.shade50 : Colors.orange.shade50;
@@ -576,34 +578,34 @@ class _WardenPageState extends State<WardenPage> {
                   Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)), child: Text(category, style: TextStyle(color: Colors.blueGrey, fontSize: 10, fontWeight: FontWeight.bold))),
                 ]),
                 const SizedBox(height: 10),
-                Text(issue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))), const SizedBox(height: 5),
-                RichText(text: TextSpan(style: const TextStyle(color: Colors.grey, fontSize: 12), children: [const TextSpan(text: "Reported by "), TextSpan(text: studentName, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)), TextSpan(text: " (Room $room)")]))
+                Text(issue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+          const SizedBox(height: 5),
+          RichText(
+            text: TextSpan(
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+              children: [
+                const TextSpan(text: "Reported by "),
+                TextSpan(text: studentName, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+                TextSpan(text: " (Room $room)"),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                height: 35, padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(6)),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: ["Pending", "In Progress", "Resolved"].contains(currentStatus) ? currentStatus : "Pending",
-                    icon: const Icon(Icons.keyboard_arrow_down, size: 16), style: const TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold),
-                    items: ["Pending", "In Progress", "Resolved"].map((String value) { return DropdownMenuItem<String>(value: value, child: Text(value)); }).toList(),
-                    onChanged: (newValue) { 
-                      if (newValue != null && newValue != currentStatus) { 
-                        updateComplaintStatus(studentId, rawIssue, newValue); 
-                      } 
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.blueGrey, side: BorderSide(color: Colors.grey.shade300), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 0), minimumSize: const Size(0, 35)), onPressed: () {}, child: const Text("Assign Staff", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))
-            ],
-          )
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.support_agent, size: 14, color: Colors.blue),
+                const SizedBox(width: 5),
+                Text("Assigned: $assignedTo", style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
         ],
       ),
     );

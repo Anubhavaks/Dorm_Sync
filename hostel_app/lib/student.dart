@@ -7,8 +7,8 @@ import 'main.dart';
 import 'package:geolocator/geolocator.dart';
 
 // 🌍 GLOBAL CLOUD URL
-const String baseUrl = "https://dorm-sync.onrender.com";
-
+// Change from Render to Localhost
+const String baseUrl = "http://127.0.0.1:8000";
 class StudentDashboard extends StatefulWidget {
   final String studentId;
   const StudentDashboard({Key? key, required this.studentId}) : super(key: key);
@@ -21,6 +21,65 @@ class _StudentDashboardState extends State<StudentDashboard> {
   int _currentIndex = 0;
   bool isAttendanceMarked = false;
   final secureStorage = const FlutterSecureStorage();
+  void _showPolicyChatbot() {
+  final TextEditingController chatController = TextEditingController();
+  String aiResponse = "Ask me anything about hostel rules, curfews, or maintenance policies!";
+
+  showModalBottomSheet(
+    context: context, 
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setChatState) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("🤖 Dorm_Sync Policy AI", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 15),
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(12)),
+                  child: Text(aiResponse, style: const TextStyle(color: Colors.indigo, height: 1.5)),
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: chatController, decoration: const InputDecoration(hintText: "E.g., What is the curfew?"))),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.send, color: Colors.indigo),
+                      onPressed: () async {
+                        setChatState(() => aiResponse = "Searching official documents...");
+                        String? token = await secureStorage.read(key: 'jwt_token');
+                        try {
+                          var res = await http.post(
+                            Uri.parse('$baseUrl/ask-policy'),
+                            headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+                            body: jsonEncode({"question": chatController.text})
+                          );
+                          var data = jsonDecode(res.body);
+                          setChatState(() => aiResponse = "${data['answer']}\n\n(Source: ${data['exact_source']})");
+                          chatController.clear();
+                        } catch (e) {
+                          setChatState(() => aiResponse = "Connection failed.");
+                        }
+                      },
+                    )
+                  ],
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        }
+      );
+    }
+  );
+}
 
   void logout() async {
     // Cryptographically wipe the secure token vault clean upon session closure
@@ -208,6 +267,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     ];
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(onPressed: _showPolicyChatbot, child: const Icon(Icons.chat)),
       backgroundColor: Colors.white,
       body: SafeArea(child: _pages[_currentIndex]),
       bottomNavigationBar: BottomNavigationBar(
@@ -491,8 +551,15 @@ class _MaintenancePageState extends State<MaintenancePage> {
     );
   }
 
-  Widget _buildStudentTicketCard({required String ticketId, required String priority, required String category, required String issue, required bool isHighPriority, required String currentStatus}) {
-    Color priorityColor = isHighPriority ? Colors.red.shade700 : Colors.orange.shade700;
+Widget _buildStudentTicketCard({
+  required String ticketId,
+  required String priority,
+  required String category,
+  required String issue,
+  required bool isHighPriority,
+  required String currentStatus,
+  required String assignedTo, // 👈 ADD THIS HERE
+}){    Color priorityColor = isHighPriority ? Colors.red.shade700 : Colors.orange.shade700;
     Color priorityBg = isHighPriority ? Colors.red.shade50 : Colors.orange.shade50;
     IconData statusIcon = Icons.pending_actions;
     Color statusColor = Colors.blueGrey;
@@ -518,10 +585,25 @@ class _MaintenancePageState extends State<MaintenancePage> {
             ],
           ),
           const SizedBox(height: 15),
-          Text(issue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
-        ],
+      Text(issue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+
+      const SizedBox(height: 10), // 👈 ADD THIS SPACING
+      // 👇 PASTE THE AGENT WIDGET HERE 👇
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.support_agent, size: 14, color: Colors.blue),
+            const SizedBox(width: 5),
+            Text("Assigned: $assignedTo", style: const TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
-    );
+    ],
+  ),
+);
   }
 
   @override
@@ -551,6 +633,7 @@ class _MaintenancePageState extends State<MaintenancePage> {
                     ticketId: "TCK-${100 + index}", priority: isHigh ? "HIGH" : "MEDIUM",
                     category: c['category'].toString().toUpperCase(), issue: cleanIssue, isHighPriority: isHigh,
                     currentStatus: c['status'] ?? "Pending",
+                    assignedTo: c['assigned_to']?.toString() ?? "Unassigned", // 👈 ADD THIS HERE
                   );
                 }
               ),

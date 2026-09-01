@@ -1,27 +1,29 @@
 import os
 from datetime import datetime, timedelta
 import jwt
-from passlib.context import CryptContext
+import bcrypt # 👈 Using native bcrypt instead of passlib
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # 1. Configuration Setup
-# In production, change this string to a long, random secret password in Render Environment Variables
 SECRET_KEY = os.getenv("JWT_SECRET", "YOUR_SUPER_SECRET_COMPLEX_KEY_HERE_123456")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security_bearer = HTTPBearer()
 
-# 2. Hashing Utilities
+# 2. Hashing Utilities (Native)
 def hash_password(password: str) -> str:
     """Converts a plain-text password into a secure bcrypt hash."""
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    hashed_bytes = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_bytes.decode('utf-8') # Return as string for the database
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Compares a plain password against the saved hash to see if they match."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(
+        plain_password.encode('utf-8'), 
+        hashed_password.encode('utf-8')
+    )
 
 # 3. JWT Token Utilities
 def create_access_token(data: dict) -> str:

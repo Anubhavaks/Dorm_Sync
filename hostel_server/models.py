@@ -33,6 +33,7 @@ class Complaint(Base):
     category = Column(String)
     room = Column(String)
     status = Column(String, default="Pending")
+    assigned_to = Column(String, default="Unassigned") # 👈 NEW: For AI routing
 
 class Attendance(Base):
     __tablename__ = "attendance"

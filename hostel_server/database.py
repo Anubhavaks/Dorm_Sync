@@ -4,10 +4,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # 1. Fallback to local SQLite if Postgres URL isn't set yet (for local development)
+# 1. Fallback to local SQLite if Postgres URL isn't set (for local development)
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://postgres:postgres@localhost:5432/dorm_sync"
-).replace("postgres://", "postgresql://", 1) # Fixes a common Render/Heroku URL quirk
+    "sqlite:///./hostel.db" # 👈 Changed fallback to local SQLite
+)
+
+# Fixes a common Render/Heroku URL quirk for production
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1).replace("postgres://", "postgresql://", 1) # Fixes a common Render/Heroku URL quirk
 
 # 2. Create the SQLAlchemy Engine
 engine = create_engine(DATABASE_URL)

@@ -100,8 +100,8 @@ class _LoginPageState extends State<LoginPage> {
     setState(() { isLoading = true; });
 
     // Switched from local testing loop to your live production cloud gateway address
-    var url = Uri.parse('https://dorm-sync.onrender.com/login');
-
+// Switch back to local testing loop
+var url = Uri.parse('http://127.0.0.1:8000/login');
     try {
       var response = await http.post(
         url,
