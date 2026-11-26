@@ -373,7 +373,7 @@ def mark_attendance(
     
     # 🛡️ Integrity Check: Force the student_id to match the authenticated user's token
     # This prevents Student_001 from marking attendance for Student_002!
-    authenticated_student = current_user["sub"]
+    authenticated_student = current_user["username"]
 
     new_attendance = models.Attendance(
         student_id=authenticated_student,
