@@ -15,8 +15,7 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1).replace("postgres://", "postgresql://", 1) # Fixes a common Render/Heroku URL quirk
 
 # 2. Create the SQLAlchemy Engine
-engine = create_engine(DATABASE_URL)
-
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 # 3. Create a Session factory for handling database operations per request
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
