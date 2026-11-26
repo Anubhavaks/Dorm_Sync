@@ -8,7 +8,8 @@ import 'package:geolocator/geolocator.dart';
 
 // 🌍 GLOBAL CLOUD URL
 // Change from Render to Localhost
-const String baseUrl = "[https://dorm-sync.onrender.com](https://dorm-sync.onrender.com)";class StudentDashboard extends StatefulWidget {
+const String baseUrl = "https://dorm-sync.onrender.com";
+class StudentDashboard extends StatefulWidget {
   final String studentId;
   const StudentDashboard({Key? key, required this.studentId}) : super(key: key);
 

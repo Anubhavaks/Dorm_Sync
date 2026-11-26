@@ -7,7 +7,8 @@ import 'main.dart';
 
 // 🌍 GLOBAL CLOUD URL
 // Change from Render to Localhost
-const String baseUrl = "[https://dorm-sync.onrender.com](https://dorm-sync.onrender.com)";class WardenPage extends StatefulWidget {
+const String baseUrl = "https://dorm-sync.onrender.com";
+class WardenPage extends StatefulWidget {
   const WardenPage({Key? key}) : super(key: key);
 
   @override
@@ -130,12 +131,12 @@ class _WardenPageState extends State<WardenPage> {
                 icon: const Icon(Icons.image),
                 label: Text(selectedImage == null ? "Attach Image" : "Image Selected!"),
                 onPressed: () async {
-                  final ImagePicker picker = ImagePicker();
-                  final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-                  if (image != null) {
-                    setDialogState(() => selectedImage = image);
-                  }
-                },
+  final ImagePicker picker = ImagePicker();
+  final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+  if (image != null) {
+    setDialogState(() => selectedImage = image);
+  }
+},
               )
             ],
           ),
@@ -153,8 +154,15 @@ class _WardenPageState extends State<WardenPage> {
                 request.fields['message'] = msgController.text;
                 
                 if (selectedImage != null) {
-                  request.files.add(await http.MultipartFile.fromPath('image', selectedImage!.path));
-                }
+  final bytes = await selectedImage!.readAsBytes();
+  request.files.add(
+    http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: selectedImage!.name,
+    ),
+  );
+}
                 
                 await request.send();
                 Navigator.pop(context);

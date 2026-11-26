@@ -101,7 +101,8 @@ class _LoginPageState extends State<LoginPage> {
 
     // Switched from local testing loop to your live production cloud gateway address
 // Switch back to local testing loop
-var url = Uri.parse('[https://dorm-sync.onrender.com/login](https://dorm-sync.onrender.com/login)');    try {
+var url = Uri.parse('https://dorm-sync.onrender.com/login');
+    try {
       var response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
