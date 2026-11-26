@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 load_dotenv()
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
@@ -49,9 +49,9 @@ hostel_rules = [
 ]
 
 # 2. Convert text to mathematical vectors and store in ChromaDB
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 vector_db = Chroma.from_documents(hostel_rules, embeddings, collection_name="dorm_policies")
-retriever = vector_db.as_retriever(search_kwargs={"k": 1}) # Fetch only the top 1 most relevant rule
+retriever = vector_db.as_retriever(search_kwargs={"k": 1})
 
 # 3. Initialize the LangChain LLM
 rag_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
