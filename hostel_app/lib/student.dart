@@ -20,6 +20,43 @@ class StudentDashboard extends StatefulWidget {
 class _StudentDashboardState extends State<StudentDashboard> {
   int _currentIndex = 0;
   bool isAttendanceMarked = false;
+  List<dynamic> notices = [];
+bool isLoadingNotices = true;
+
+@override
+void initState() {
+  super.initState();
+  fetchNotices();
+}
+
+Future<void> fetchNotices() async {
+  if (!mounted) return;
+  setState(() => isLoadingNotices = true);
+  String? token = await secureStorage.read(key: 'jwt_token');
+
+  try {
+    final response = await http.get(
+      Uri.parse('$baseUrl/get-notices'),
+      headers: {
+        "Content-Type": "application/json",
+        if (token != null) "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200 && mounted) {
+      final decoded = jsonDecode(response.body);
+      setState(() {
+        notices = decoded is List ? decoded : (decoded['notices'] ?? []);
+        isLoadingNotices = false;
+      });
+    } else if (mounted) {
+      setState(() => isLoadingNotices = false);
+    }
+  } catch (e) {
+    print("Error fetching notices: $e");
+    if (mounted) setState(() => isLoadingNotices = false);
+  }
+}
   final secureStorage = const FlutterSecureStorage();
   void _showPolicyChatbot() {
   final TextEditingController chatController = TextEditingController();
@@ -228,30 +265,57 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ],
           ),
           const SizedBox(height: 15),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)]),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          if (isLoadingNotices)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+          else if (notices.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
+              child: const Text("No notices posted yet.", style: TextStyle(color: Colors.blueGrey)),
+            )
+          else
+            ...notices.reversed.map((notice) {
+              final title = notice['title']?.toString() ?? "Notice";
+              final message = notice['message']?.toString() ?? "";
+              return Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10)],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle), child: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20)),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text("Warden • Recent", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                        Text("Gate Timing Update", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: Colors.orange.shade50, shape: BoxShape.circle),
+                          child: const Icon(Icons.campaign_outlined, color: Colors.orange, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("Warden • Live", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
+                        ),
                       ],
-                    )
+                    ),
+                    const SizedBox(height: 12),
+                    Text(message, style: const TextStyle(color: Colors.blueGrey, height: 1.5)),
                   ],
                 ),
-                const SizedBox(height: 15),
-                const Text("Main gate will close at 10:00 PM tonight due to scheduled maintenance. Ensure you are inside the premises before the cutoff.", style: TextStyle(color: Colors.blueGrey, height: 1.5))
-              ],
-            ),
-          )
+              );
+            }).toList(),
         ],
       ),
     );
